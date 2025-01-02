@@ -1,0 +1,21 @@
+{
+  "name": "test-phaser-project",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite  --port 4321 --host",
+    "build": "vite build",
+    "preview": "vite preview",
+    "firebase": "npm run build && firebase deploy --only hosting"
+  },
+  "devDependencies": {
+    "vite": "^5.2.0"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "firebase": "^10.12.2",
+    "phaser": "^3.80.1",
+    "pnpm": "^9.2.0"
+  }
+}
