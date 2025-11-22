@@ -1,4 +1,5 @@
 import AudioManager from "../Sounds/AudioManager";
+import { getTopPlayers } from "../utils/localData.js";
 
 class MainMenu extends Phaser.Scene {
 
@@ -121,6 +122,8 @@ class MainMenu extends Phaser.Scene {
     });
 
     this.inputElement.setInteractive();
+
+    this.showTopPlayers();
   }
 
   update() {
@@ -143,6 +146,30 @@ class MainMenu extends Phaser.Scene {
     // Aquí puedes definir lo que sucede cuando se hace clic en el botón de créditos
     this.audioManager.stop('intro');
     this.scene.start('CreditsScene', { audioManager: this.audioManager });
+  }
+
+  async showTopPlayers() {
+    const topPlayers = await getTopPlayers();
+    const top3 = topPlayers.slice(0, 3);
+
+    const startX = this.centerX;
+    const startY = this.centerY + 150;
+
+    this.add.text(startX, startY, "TOP 3 PLAYERS", {
+      fontFamily: 'PressStart2P',
+      fontSize: '20px',
+      fill: '#FFE040'
+    }).setOrigin(0.5);
+
+    top3.forEach((player, index) => {
+      const y = startY + 40 + (index * 30);
+      const text = `${index + 1}. ${player.playerName} - ${player.totalScore}`;
+      this.add.text(startX, y, text, {
+        fontFamily: 'PressStart2P',
+        fontSize: '16px',
+        fill: '#ffffff'
+      }).setOrigin(0.5);
+    });
   }
 }
 

@@ -1,6 +1,6 @@
 // src/main.js
 
-import { addScore, getScores } from './utils/firestore';
+import { addScore, getScores } from './utils/localData.js';
 
 // Agregar una puntuación de prueba
 //addScore("Jugador1", 5, 100);

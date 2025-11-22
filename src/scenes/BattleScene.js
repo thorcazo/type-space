@@ -1,6 +1,6 @@
 import Player from "../gameObjects/player.js";
 import Enemy from "../gameObjects/enemy.js";
-import { getDataEnemies, getWordsEnemies, getTopPlayers } from '../utils/firestore.js';
+import { getDataEnemies, getWordsEnemies, getTopPlayers } from '../utils/localData.js';
 
 export default class BattleScene extends Phaser.Scene {
 
@@ -350,11 +350,12 @@ export default class BattleScene extends Phaser.Scene {
       // Eliminar la última letra de currentWord
       this.currentWord = this.currentWord.slice(0, -1);
     } else {
-      this.currentKey = event.key;
-      const isKeyCorrect = this.enemies.getChildren().some((enemy) => enemy.wordText.text.startsWith(this.currentWord + event.key));
+      const inputKey = event.key.toUpperCase();
+      this.currentKey = inputKey;
+      const isKeyCorrect = this.enemies.getChildren().some((enemy) => enemy.wordText.text.startsWith(this.currentWord + inputKey));
       if (isKeyCorrect) {
         this.audioManager.play('NumKey');
-        this.currentWord += event.key;
+        this.currentWord += inputKey;
       } else {
         if (this.currentWord !== "") { // Solo reproduce el sonido si hay una palabra actual
           this.currentKey = null;
@@ -379,37 +380,66 @@ export default class BattleScene extends Phaser.Scene {
   }
 
   async cargarDatos() {
-    const datos = await getWordsEnemies();
-    if (datos) {
-      this.wordsColors = datos;
-      this.palabras = this.wordsColors.filter(item => item.difficulty === "easy").map(item => item.word);
-
-      this.time.addEvent({
-        delay: 1000,
-        callback: this.actualizarDificultad,
-        callbackScope: this,
-        loop: true
-      });
-
-
-      this.colors = this.wordsColors.map(item => item.color);
-    } else {
-      console.error("No se pudieron cargar los datos de Firestore.");
+    try {
+      const datos = await getWordsEnemies();
+      if (datos && datos.length > 0) {
+        this.wordsColors = datos;
+        this.palabras = this.wordsColors.filter(item => item.difficulty === "easy").map(item => item.word);
+        this.colors = this.wordsColors.map(item => item.color);
+      }
+    } catch (error) {
+      console.error("Error loading words:", error);
     }
 
-    const dataEnemies = await getDataEnemies();
-    this.lowEnemies = dataEnemies.filter(enemy => enemy.difficulty === "low");
-    this.mediumEnemies = dataEnemies.filter(enemy => enemy.difficulty === "medium");
+    // Fallback data if firestore fails or returns empty
+    if (!this.palabras || this.palabras.length === 0) {
+      console.warn("Using fallback words");
+      this.palabras = ["JAVA", "PYTHON", "HTML", "CSS", "REACT", "VUE", "ANGULAR", "NODE", "PHP", "RUBY", "SWIFT", "KOTLIN", "DART", "FLUTTER", "RUST", "GO", "SCALA", "PERL", "LUA", "SQL"];
+      this.colors = Array(20).fill("#FFFFFF");
+      this.wordsColors = this.palabras.map((word, i) => ({ word, color: this.colors[i], difficulty: "easy" }));
+    }
+
+    this.time.addEvent({
+      delay: 1000,
+      callback: this.actualizarDificultad,
+      callbackScope: this,
+      loop: true
+    });
+
+    try {
+      const dataEnemies = await getDataEnemies();
+      if (dataEnemies && dataEnemies.length > 0) {
+        this.lowEnemies = dataEnemies.filter(enemy => enemy.difficulty === "low");
+        this.mediumEnemies = dataEnemies.filter(enemy => enemy.difficulty === "medium");
+      }
+    } catch (error) {
+      console.error("Error loading enemies:", error);
+    }
+
+    // Fallback enemies
+    if (!this.lowEnemies || this.lowEnemies.length === 0) {
+      this.lowEnemies = [{ type: "Enemy1", health: 100, speed: 50, points: 10, difficulty: "low" }];
+    }
+    if (!this.mediumEnemies || this.mediumEnemies.length === 0) {
+      this.mediumEnemies = [{ type: "Enemy2", health: 200, speed: 70, points: 20, difficulty: "medium" }];
+    }
+
+    this.dataLoaded = true;
   }
 
 
   actualizarDificultad() {
-    if (this.scorePlayer > 100) {
-      this.palabras = this.wordsColors.filter(item => item.difficulty === "normal").map(item => item.word);
+    if (this.scorePlayer > 100 && this.wordsColors) {
+      const normalWords = this.wordsColors.filter(item => item.difficulty === "normal").map(item => item.word);
+      if (normalWords.length > 0) {
+        this.palabras = normalWords;
+      }
     }
   }
 
   createEnemy() {
+    if (!this.dataLoaded) return;
+
     if (this.enemies.getLength() < this.enemigosEnPantalla) {
       let randomEnemyData;
       if (this.scorePlayer < 100) {
@@ -424,8 +454,6 @@ export default class BattleScene extends Phaser.Scene {
       this.randomizarPalabra(enemy, null, null, randomEnemyData.health, randomEnemyData.speed);
       enemy.points = parseInt(randomEnemyData.points);
 
-      // console.log('Datos enemigo: ', randomEnemyData.type, randomEnemyData.health, randomEnemyData.speed, randomEnemyData.points, randomEnemyData.difficulty, '| Palabra: ', enemy.wordText.text, '| Color: ', enemy.wordText.style.backgroundColor)
-
       this.enemies.add(enemy);
       this.enemySpawnTimer = 0;
     }
@@ -434,23 +462,32 @@ export default class BattleScene extends Phaser.Scene {
 
 
   randomizarPalabra(enemy, palabra = null, color = null, health = null, speed = null) {
+    if (!this.palabras || this.palabras.length === 0) return;
+
     let palabraAleatoria = palabra || this.palabras[Math.floor(Math.random() * this.palabras.length)];
-    let colorAleatorio = color || this.colors[Math.floor(Math.random() * this.colors.length)];
+    let colorAleatorio = color || (this.colors && this.colors.length > 0 ? this.colors[Math.floor(Math.random() * this.colors.length)] : "#FFFFFF");
+
     let palabraUnica = true;
+    let attempts = 0;
+    const maxAttempts = 50;
+
     this.enemies.getChildren().forEach((existingEnemy) => {
       if (existingEnemy.wordText.text === palabraAleatoria) {
         palabraUnica = false;
-        while (!palabraUnica) {
-          palabraAleatoria = this.palabras[Math.floor(Math.random() * this.palabras.length)];
-          palabraUnica = true;
-          this.enemies.getChildren().forEach((existingEnemy) => {
-            if (existingEnemy.wordText.text === palabraAleatoria) {
-              palabraUnica = false;
-            }
-          });
-        }
       }
     });
+
+    while (!palabraUnica && attempts < maxAttempts) {
+      palabraAleatoria = this.palabras[Math.floor(Math.random() * this.palabras.length)];
+      palabraUnica = true;
+      this.enemies.getChildren().forEach((existingEnemy) => {
+        if (existingEnemy.wordText.text === palabraAleatoria) {
+          palabraUnica = false;
+        }
+      });
+      attempts++;
+    }
+
     enemy.wordText.setText(palabraAleatoria);
     enemy.wordText.setStyle({ backgroundColor: colorAleatorio });
     if (health) enemy.health = health;

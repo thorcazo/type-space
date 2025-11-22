@@ -1,4 +1,4 @@
-import { getTopPlayers } from '../utils/firestore.js';
+import { getTopPlayers } from '../utils/localData.js';
 import AudioManager from '../Sounds/AudioManager.js';
 
 export default class Gameover extends Phaser.Scene {

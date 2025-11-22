@@ -1,6 +1,6 @@
 import AudioManager from "../Sounds/AudioManager";
 import Phaser from "phaser";
-import { addScore } from "../utils/firestore";
+import { addScore } from "../utils/localData.js";
 
 export default class leaderboardScene extends Phaser.Scene {
   constructor() {
