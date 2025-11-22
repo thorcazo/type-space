@@ -24,8 +24,34 @@ export default class PowerUp extends Phaser.GameObjects.Sprite {
   }
 
 
-  applyEffect(){
-    
+  applyEffect(player, enemies) {
+    switch (this.effect) {
+      case "extraLife":
+        player.health += 1;
+        break;
+      case "bomb":
+        enemies.getChildren().forEach((enemy) => {
+          enemy.wordText.destroy();
+          enemy.destroy();
+        });
+        break;
+      case "slowTime":
+        enemies.getChildren().forEach((enemy) => {
+          if (!enemy.isSlowed) {
+            enemy.isSlowed = true;
+            enemy.speed /= 2;
+            this.scene.time.addEvent({
+              delay: 5000,
+              callback: () => {
+                enemy.speed *= 2;
+                enemy.isSlowed = false;
+              },
+              callbackScope: this,
+            });
+          }
+        });
+        break;
+    }
   }
 
 

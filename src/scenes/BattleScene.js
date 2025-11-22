@@ -117,6 +117,7 @@ export default class BattleScene extends Phaser.Scene {
 
     this.enemies = this.add.group();
     this.projectiles = this.add.group();
+    this.powerups = this.add.group();
     this.enemies.children.each(child => {
       const enemy = child;
       enemy.setTarget(this.Player);
@@ -124,12 +125,21 @@ export default class BattleScene extends Phaser.Scene {
 
     // Physics
     this.physics.add.overlap(this.projectiles, this.enemies, this.dealDamage, null, this);
+    this.physics.add.overlap(this.projectiles, this.powerups, this.activatePowerUp, null, this);
     this.physics.add.collider(this.Player, this.enemies, this.takeDamage, null, this);
 
     // Configurar el temporizador para reducir el umbral de spawn cada 10 segundos
     this.time.addEvent({
       delay: this.reduceThresholdInterval,
       callback: this.reduceSpawnThreshold,
+      callbackScope: this,
+      loop: true
+    });
+
+    // Configurar el temporizador para generar power-ups cada 30 segundos
+    this.time.addEvent({
+      delay: 30000,
+      callback: this.createPowerUp,
       callbackScope: this,
       loop: true
     });
@@ -182,26 +192,13 @@ export default class BattleScene extends Phaser.Scene {
       }
       this.enemies.getChildren().forEach((enemy) => {
         if (this.currentWord === enemy.wordText.text) {
-          this.audioManager.play('bulletShot');
-          const bullet = this.physics.add.image(this.Player.x, this.Player.y, "Bullet").setScale(0.05);
-          const angle = Phaser.Math.Angle.Between(this.Player.x, this.Player.y, enemy.x, enemy.y);
-
-          if (this.scorePlayer > 100) {
-            this.bulletVelocity = 1300;
-          }
-
-          bullet.setVelocity(Math.cos(angle) * this.bulletVelocity, Math.sin(angle) * this.bulletVelocity);
-          bullet.type = "player";
-          bullet.currentWord = this.currentWord;
-          bullet.damage = 50;
-
-          if (this.scorePlayer > 100) {
-            bullet.damage = 100;
-          }
-
-          this.projectiles.add(bullet);
-          this.Player.angle = angle * (180 / Math.PI) + 90;
-          this.currentWord = "";
+          this.fireBullet(enemy);
+          return;
+        }
+      });
+      this.powerups.getChildren().forEach((powerup) => {
+        if (this.currentWord === powerup.wordText.text) {
+          this.fireBullet(powerup);
           return;
         }
       });
@@ -213,6 +210,64 @@ export default class BattleScene extends Phaser.Scene {
     this.stars2.tilePositionX += 0.05;
 
   } // FINAL UPDATE
+
+  fireBullet(target) {
+    this.audioManager.play('bulletShot');
+    const bullet = this.physics.add.image(this.Player.x, this.Player.y, "Bullet").setScale(0.05);
+    const angle = Phaser.Math.Angle.Between(this.Player.x, this.Player.y, target.x, target.y);
+
+    if (this.scorePlayer > 100) {
+      this.bulletVelocity = 1300;
+    }
+
+    bullet.setVelocity(Math.cos(angle) * this.bulletVelocity, Math.sin(angle) * this.bulletVelocity);
+    bullet.type = "player";
+    bullet.currentWord = this.currentWord;
+    bullet.damage = 50;
+
+    if (this.scorePlayer > 100) {
+      bullet.damage = 100;
+    }
+
+    this.projectiles.add(bullet);
+    this.Player.angle = angle * (180 / Math.PI) + 90;
+    this.currentWord = "";
+  }
+
+  activatePowerUp(bullet, powerup) {
+    if (bullet.currentWord === powerup.wordText.text) {
+      powerup.applyEffect(this.Player, this.enemies);
+      powerup.wordText.destroy();
+      powerup.destroy();
+      bullet.destroy();
+    }
+  }
+
+  createPowerUp() {
+    const powerUpTypes = ["extraLife", "bomb", "slowTime"];
+    const randomType = powerUpTypes[Math.floor(Math.random() * powerUpTypes.length)];
+    const randomY = Phaser.Math.Between(0, this.game.config.height);
+    const powerup = new PowerUp(this, 0, randomY, "powerup", randomType);
+    let randomWord = this.palabras[Math.floor(Math.random() * this.palabras.length)];
+    let wordIsUnique = false;
+    while (!wordIsUnique) {
+      wordIsUnique = true;
+      this.enemies.getChildren().forEach((enemy) => {
+        if (enemy.wordText.text === randomWord) {
+          wordIsUnique = false;
+          randomWord = this.palabras[Math.floor(Math.random() * this.palabras.length)];
+        }
+      });
+      this.powerups.getChildren().forEach((powerup) => {
+        if (powerup.wordText.text === randomWord) {
+          wordIsUnique = false;
+          randomWord = this.palabras[Math.floor(Math.random() * this.palabras.length)];
+        }
+      });
+    }
+    powerup.wordText = this.add.text(powerup.x, powerup.y - 60, randomWord, { font: "16px PressStart2P", fill: "#00ff00" });
+    this.powerups.add(powerup);
+  }
 
   dealDamage(bullet, object) {
     if (bullet.type !== object.texture.key) {
@@ -286,9 +341,9 @@ export default class BattleScene extends Phaser.Scene {
 
               topPlayers.then((players) => {
                 if (players.length < 10 || battleSceneData.puntuacionTotal > players[players.length - 1].totalScore) {
-                  this.scene.launch('leaderboardScene', { playerData: battleSceneData });
+                  this.scene.launch('leaderboardScene', { playerData: battleSceneData, audioManager: this.audioManager });
                 } else {
-                  this.scene.launch('Gameover', { playerData: battleSceneData });
+                  this.scene.launch('Gameover', { playerData: battleSceneData, audioManager: this.audioManager });
                 }
               });
             }
@@ -324,15 +379,15 @@ export default class BattleScene extends Phaser.Scene {
           // Si no hay jugadores en la base de datos, lanza la escena 'Gameover'
           if (players.length === 0) {
             console.log('No hay jugadores en la base de datos');
-            this.scene.launch('leaderboardScene', { playerData: battleSceneData });
+            this.scene.launch('leaderboardScene', { playerData: battleSceneData, audioManager: this.audioManager });
           } else {
             //El jugador entra en leaderboard si su puntuación es mayor que la del último jugador en la tabla de líderes
             if (players.length < 10 && battleSceneData.puntuacionTotal != "0" || battleSceneData.puntuacionTotal > players[players.length - 1].totalScore) {
               console.log('Nuevo record: ', battleSceneData.puntuacionTotal, ' | ', players[players.length - 1].totalScore);
-              this.scene.launch('leaderboardScene', { playerData: battleSceneData });
+              this.scene.launch('leaderboardScene', { playerData: battleSceneData, audioManager: this.audioManager });
             } else {
               console.log('No hay nuevo record: ', battleSceneData.puntuacionTotal, ' | ', players[players.length - 1].totalScore);
-              this.scene.launch('Gameover', { playerData: battleSceneData });
+              this.scene.launch('Gameover', { playerData: battleSceneData, audioManager: this.audioManager });
             }
           }
         });
